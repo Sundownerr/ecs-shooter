@@ -1,6 +1,6 @@
 # 🎮 ECS Shooter
 
-A shooter game with 1000+ enemies built with Morpeh ECS framework for action-packed high-performance gameplay.
+A shooter game with 1000+ enemies built with [Morpeh ECS](https://github.com/scellecs/morpeh) framework for action-packed high-performance gameplay.
 
 
 https://github.com/user-attachments/assets/49e4bfb5-8865-4397-a664-78482c4abc0c
