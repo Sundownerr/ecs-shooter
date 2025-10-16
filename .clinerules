@@ -1,0 +1,338 @@
+# Swarm-2 Project Intelligence
+
+This file captures important patterns, preferences, and project intelligence that will help me work more effectively with the Swarm-2 project.
+
+## Naming Conventions
+
+### System Naming
+- Systems are named with verbs or actions, often prefixed with their category
+  - Example: `Action_DecreaseManaSystem`, `Check_HasManaSystem`
+- Systems that initialize components are prefixed with `Init_`
+  - Example: `Init_MoveTransformDurationSystem`
+- Systems that check conditions are prefixed with `Check_`
+  - Example: `Check_NotOnCooldownSystem`
+
+### Component Naming
+- Components are typically named with nouns
+- Component collections are often pluralized
+  - Example: `PlayerInputComponents`, `GameComponents`
+
+### Config Naming
+- Configuration classes are suffixed with `Config`
+  - Example: `DashConfig`, `SprintConfig`, `DamageConfig`, `GameObjectConfig`
+- Reference config classes follow a consistent pattern for flexible targeting
+  - Example: `TransformConfig`, `RigidbodyTargetConfig`, `GameObjectConfig`
+
+## File Organization
+
+### Feature Organization
+- Code is organized by feature rather than by technical layer
+- Each feature has its own directory under `Features/`
+- Related systems are grouped together in feature directories
+
+### System Types
+- Action systems implement behaviors that can be triggered
+- Condition systems check if certain criteria are met
+- Initialize systems set up components when they are created
+- Usage systems manage ongoing actions and their lifecycle
+
+## Coding Patterns
+
+### Component Access Pattern
+- All component access is done through stashes, using one of two patterns:
+
+1. ECS System Pattern:
+   - Declare stashes as private fields at class level:
+     ```csharp
+     private Stash<VelocityGreaterThan> _velocityGreaterThan;
+     ```
+   - Initialize in OnAwake method:
+     ```csharp
+     public override void OnAwake()
+     {
+         _velocityGreaterThan = World.GetStash<VelocityGreaterThan>();
+     }
+     ```
+   - Access via field: `_stash.Add(entity)`, `_stash.Remove(entity)`, etc.
+
+2. Non-ECS Pattern:
+   - Use StaticStash pattern (see StaticStash Pattern section)
+   - Access via static class: `StaticStash.ComponentName.Add(entity)`
+   - If needed stash doesn't exist, follow the "Adding new stash" guidelines in StaticStash Pattern section
+
+Key Guidelines:
+- Never use direct entity methods (entity.AddComponent, entity.SetComponent, etc.)
+- Always use stash methods for better performance and organization
+- For non-ECS scripts, refer to StaticStash Pattern section for complete usage guide
+
+### StaticStash Pattern
+The StaticStash pattern provides centralized component access through a static class:
+- Located at: Features/Ability/StaticStash.cs
+- Provides better performance and clearer code organization
+- Used for non-ECS scripts
+- Usage:
+  ```csharp
+  // Adding components
+  StaticStash.ComponentName.Add(entity);
+  // Setting component values
+  StaticStash.ComponentName.Set(entity, new ComponentType { /* setup */ });
+  // Removing components
+  StaticStash.ComponentName.Remove(entity);
+  // Checking if entity has component
+  StaticStash.ComponentName.Has(entity);
+  // Getting component reference
+  ref var component = ref StaticStash.ComponentName.Get(entity);
+  ```
+- Adding new stash:
+  1. Declare in StaticStash class:
+     ```csharp
+     public static Stash<YourComponent> YourComponent;
+     ```
+  2. Initialize in StaticStash.Initialize:
+     ```csharp
+     YourComponent = world.GetStash<YourComponent>();
+     ```
+
+### ECS Patterns
+- Systems operate on entities with specific component combinations
+- Components store data, systems implement behavior
+- Entities are referenced by ID
+- Systems are grouped into features
+
+### Provider Pattern
+- Providers used for accessing objects outside of ECS pipeline (e.g Monobehaviours, Animators, Colliders, etc)
+- Examples: `PlayerProvider`, `AbilityProvider`, `StateMachineProvider`
+- Providers often handle creation and management of related entities
+
+### Factory Pattern
+- Factory systems create complex entities with appropriate components (Example:`PlayerFactorySystem`)
+- Static factory for entity creation outside of ECS systems (Example: `AbilityProviderFactory`)
+
+### State Machine Pattern
+- State machines manage entity behavior states
+- States have transitions based on conditions
+- Actions are triggered by state changes
+
+## Implementation Details
+
+### Player Resources
+- Players have health and mana resources
+- Resources can regenerate over time
+- Abilities and actions can consume resources
+
+### Ability System
+- Abilities have conditions, cooldowns, and targets
+- Abilities can be activated by input or other triggers
+- Abilities trigger actions when used
+
+### Movement System
+- Players can move using various methods (basic, dash, sprint)
+- Movement can be affected by stats and modifiers
+- Special movements may have cooldowns or resource costs
+
+### Combat System
+- Damage can be dealt and received
+- Weapons can be used to attack
+- Targeting systems determine valid targets
+
+## Common Workflows
+
+### Adding a New Ability
+1. Create ability configuration
+2. Define ability conditions
+3. Implement ability actions
+4. Register the ability with the appropriate provider
+5. Set up input handling if player-controlled
+
+### Adding a New Action
+1. Create action configuration
+2. Implement action system
+3. Register the action system in the appropriate feature
+4. Connect the action to triggers (abilities, states, etc.)
+
+### Adding a New Condition
+1. Create condition components if needed
+2. Implement condition checking system
+3. Register the condition system in the appropriate feature
+4. Connect the condition to relevant systems (abilities, state transitions)
+
+### Condition Fulfillment Pattern
+When implementing condition checking systems:
+1. Define a component to store the condition parameters (e.g., VelocityGreaterThan, GameObjectActive)
+2. Initialize stashes in the OnAwake method
+3. Filter for entities with the condition component and Active component
+4. In OnUpdate, check if the condition is met
+5. If met, increment the ConditionFulfilled.Value counter:
+   ```csharp
+   if (condition_is_met)
+   {
+       ref var conditionFulfilled = ref _conditionFulfilled.Get(entity);
+       conditionFulfilled.Value++;
+   }
+   ```
+
+### Reference Resolution Pattern
+For systems that need to resolve references from configs:
+1. Create a config struct (e.g., TransformConfig, RigidbodyTargetConfig, GameObjectConfig)
+2. Create a component to store both the config and the resolved reference
+3. Create a system that resolves the reference based on the config options
+4. Filter for entities with the config component and Active component
+5. In OnUpdate, resolve the reference based on the config type:
+   ```csharp
+   switch (fromConfig.Config.TargetGameObject)
+   {
+       case TargetGameObject.UserGameObject:
+           // Get from user entity
+           break;
+       case TargetGameObject.TargetGameObject:
+           // Get from target entity
+           break;
+       case TargetGameObject.CustomGameObject:
+           // Use directly from config
+           break;
+   }
+   ```
+
+### AbilityActionNames Mapping Pattern
+When working with the ability system, be aware of the mapping pattern in AbilityActionNames.cs:
+- The outer dictionary key is the ActionId for the action group (Create, Destroy, Move, Rotate, etc.)
+- The inner dictionary key is the ActionId for the action type (GameObject, Transform, Rigidbody, etc.)
+- The inner dictionary value is the Type of the ability action class for that combination
+- The mapping is created in AbilityActionToTypeMap.Create() and converted to a dictionary in AbilityActionNames.CreateNameToTypes()
+- When adding new ability actions, follow this pattern to maintain consistency
+- Example: To add a new "Scale" action for "Transform", you would:
+  1. Add ActionId.Scale constant in ActionId.cs with the next available ID
+  2. Add a corresponding entry in the ActionId.ToName dictionary (e.g., {Scale, "Scale"})
+  3. Add a new entry to AbilityActionToTypeMap.Create() using the Group() and With<>() extension methods:
+     ```csharp
+     ActionId.Scale.Group()
+         .With<ScaleTransform_AbilityAction>(ActionId.Transform)
+     ```
+
+### AbilityActionToTypeMap Mapping Pattern
+When adding new '_AbilityAction' scripts to the ability system, they must be mapped in AbilityActionToTypeMap.cs:
+- Each '_AbilityAction' script should be mapped to an action group and action type in the Create() method
+- The mapping follows this pattern:
+  ```csharp
+  ActionId.[GroupName].Group()
+      .With<[ActionName]_AbilityAction>(ActionId.[TypeName])
+  ```
+- The naming convention for determining group and type is:
+  - For `SetGameObjectActive_AbilityAction`, the group is `SetActive` and the type is `GameObject`
+  - For `WeaponTrigger_AbilityAction`, the group is `WeaponTrigger` and the type is `WeaponTrigger`
+  - For `ChangeAnimatorSettings_AbilityAction`, the group is `Animator` and the type is `Animator`
+- If the required action group or type doesn't exist in ActionId.cs, add it following these steps:
+  1. Add a new constant in the ActionId class with the next available ID (e.g., `public const int NewAction = 50;`)
+  2. Add a corresponding entry in the ActionId.ToName dictionary (e.g., `{NewAction, "New Action"}`)
+  3. Add the mapping in AbilityActionToTypeMap.Create() using the pattern above
+
+
+### Creating a New Ability Condition Pattern
+When implementing a new ability condition for the ability system:
+
+1. Create a condition component in a Components file (e.g., YellowCubesComponents.cs):
+   ```csharp
+   public struct YellowCubesCondition : IComponent
+   {
+       public float Value;
+       public TargetType TargetType;
+       public YellowCubesComparisonType ComparisonType;
+       public bool UsePercent; // If true, Value is a percentage
+   }
+
+   public enum YellowCubesComparisonType
+   {
+       LessThan = 0,
+       MoreThan = 1,
+   }
+   ```
+
+2. Create a condition checking system (e.g., Check_YellowCubesSystem.cs):
+   - Follow the Condition Fulfillment Pattern
+   - Filter for entities with your condition component and Active component
+   - Implement the condition checking logic
+   - Increment ConditionFulfilled.Value when the condition is met
+
+3. Update AbilityEnum.cs:
+   - Add your condition to the AbilityConditionType enum
+
+4. Update StaticStash.cs:
+   - Add a stash for your condition component
+   - Initialize the stash in the Initialize method
+
+5. Update ConditionsFeature.cs:
+   - Register your condition checking system
+
+6. Update AbilityCondition.cs:
+   - Add a config struct for your condition
+   - Add a field for the config in the AbilityCondition class
+   - Add a method to check if the condition type matches your condition
+
+7. Update AbilityConditionFactory.cs:
+   - Add a case for your condition type in the switch statement
+   - Set up the condition component with values from the config
+
+### CAPR Command
+- The command "CAPR for [Filename]" indicates a request to refactor the specified file to implement the Component Access Pattern (see "Component Access Pattern" section under "Coding Patterns")
+
+## Project Preferences
+
+### Code Style
+- Clear separation between data (components) and behavior (systems)
+- Systems focused on single responsibilities
+- Feature-based organization
+- Descriptive naming that indicates purpose
+
+### Architecture Preferences
+- The game uses ECS architecture
+- Provider pattern for accessing objects outside of ECS pipeline (e.g Monobehaviours, Animators, Colliders, etc)
+- Static factory pattern for entity creation outside of ECS systems
+- State machines for complex behaviors
+
+### Debugging Patterns
+When debugging issues in the Swarm-2 project:
+
+1. **Component Inspection**:
+   - Use the StaticStash to check if entities have expected components
+   - Verify component values match expectations
+
+2. **System Execution**:
+   - Check if systems are registered in the correct features
+   - Verify systems are filtering for the correct component combinations
+   - Ensure OnUpdate logic is correctly implemented
+
+3. **Entity Lifecycle**:
+   - Track entity creation through factory systems
+   - Verify entity destruction is properly handled
+   - Check for orphaned components or entities
+
+4. **Common Issues**:
+   - Missing component initialization
+   - Incorrect stash usage
+   - Improper condition checking
+   - Unregistered systems
+   - Missing StaticStash entries
+
+### Code Review Checklist
+When reviewing code for the Swarm-2 project, check for:
+
+1. **Component Access Pattern**:
+   - All component access through stashes
+   - No direct entity methods
+   - Proper stash initialization
+
+2. **Naming Conventions**:
+   - Systems named with appropriate prefixes
+   - Components named as nouns
+   - Configs suffixed with Config
+
+3. **System Design**:
+   - Single responsibility
+   - Proper component filtering
+   - Clear and efficient OnUpdate logic
+   - Proper error handling
+
+4. **Integration**:
+   - Systems registered in appropriate features
+   - Proper initialization order
+   - Correct dependencies

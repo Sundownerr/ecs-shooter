@@ -1,0 +1,38 @@
+﻿using Game.Components;
+using Scellecs.Morpeh;
+using Unity.IL2CPP.CompilerServices;
+using UnityEngine;
+
+namespace Game.Systems
+{
+    [Il2CppSetOption(Option.NullChecks, false)]
+    [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
+    [Il2CppSetOption(Option.DivideByZeroChecks, false)]
+    public sealed class DestroyDamagableSystem : ISystem
+    {
+        private Stash<Damagable> _damagable;
+        private Filter _filter;
+
+        public void Dispose() { }
+
+        public void OnAwake()
+        {
+            _filter = Entities.With<Damagable, WillBeDestroyed>();
+            _damagable = World.GetStash<Damagable>();
+        }
+
+        public World World { get; set; }
+
+        public void OnUpdate(float deltaTime)
+        {
+            foreach (var entity in _filter) {
+                ref var damagable = ref _damagable.Get(entity);
+
+                if (damagable.Instance.DestroyGameObjectOnDeath)
+                    Object.Destroy(damagable.Instance.gameObject);
+
+                World.RemoveEntity(entity);
+            }
+        }
+    }
+}
